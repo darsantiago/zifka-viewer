@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Plan financiero — Zifka Advisor</title>
+  <meta name="referrer" content="no-referrer">
+  <style>
+    :root{color-scheme:light dark;--bg:#f7f7f8;--card:#fff;--fg:#0f172a;--muted:#64748b;--accent:#f59e0b;--border:#e2e8f0}
+    @media(prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#111a2e;--fg:#f8fafc;--muted:#94a3b8;--border:#1e293b}}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.5}
+    .wrap{max-width:720px;margin:0 auto;padding:32px 20px}
+    .brand{font-size:12px;letter-spacing:.2em;color:var(--accent);font-weight:700}
+    h1{margin:.5rem 0 .25rem;font-size:28px}
+    .prepared{color:var(--muted);font-size:14px;margin-bottom:24px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px}
+    .card h2{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+    .kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+    .kv:last-child{border:0}
+    .kv .k{color:var(--muted)}
+    .kv .v{font-weight:700}
+    .hero{background:linear-gradient(135deg,var(--accent),#f97316);color:#fff;text-align:center;padding:28px 20px;border-radius:20px;margin-bottom:20px}
+    .hero .label{font-size:12px;letter-spacing:.15em;text-transform:uppercase;opacity:.85}
+    .hero .value{font-size:36px;font-weight:800;margin:8px 0}
+    .foot{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
+    .sig-ok{color:#10b981}
+    .sig-bad{color:#ef4444}
+    .empty{text-align:center;padding:60px 20px;color:var(--muted)}
+    ul{padding-left:20px;margin:.5rem 0}
+    a{color:var(--accent)}
+  </style>
+</head>
+<body>
+<div class="wrap" id="root"><div class="empty">Abriendo plan...</div></div>
+<script>
+const PUBLIC_KEY_HEX = "adc008715d83d3774236508c3d592c3eacc0ce6a2f3e05facea40bee334052e5";
+function hexToBytes(h){const a=new Uint8Array(h.length/2);for(let i=0;i<h.length;i+=2)a[i/2]=parseInt(h.substr(i,2),16);return a}
+function b64uToBytes(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function money(v){return typeof v==="number"?new Intl.NumberFormat(navigator.language||"es-CO",{style:"currency",currency:v.__currency||"COP",maximumFractionDigits:0}).format(v):esc(v)}
+async function verify(payloadBytes,sigBytes,pubBytes){
+  // Ed25519 via SubtleCrypto (native, no external library).
+  const key=await crypto.subtle.importKey("raw",pubBytes,{name:"Ed25519"},false,["verify"]);
+  return crypto.subtle.verify("Ed25519",key,sigBytes,payloadBytes);
+}
+async function render(){
+  const root=document.getElementById("root");
+  const frag=location.hash.slice(1);
+  if(!frag){root.innerHTML='<div class="empty">Este enlace no contiene un plan. Pídele a tu asesor uno nuevo.</div>';return}
+  let payload,sig,data;
+  try{
+    const parts=frag.split(".");
+    if(parts.length!==2)throw new Error("format");
+    payload=b64uToBytes(parts[0]);
+    sig=b64uToBytes(parts[1]);
+    data=JSON.parse(new TextDecoder().decode(payload));
+  }catch(e){root.innerHTML='<div class="empty">Enlace inválido o dañado.</div>';return}
+  let ok=false;
+  try{ok=await verify(payload,sig,hexToBytes(PUBLIC_KEY_HEX))}catch(e){}
+  const rows=(data.rows||[]).map(r=>`<div class="kv"><span class="k">${esc(r.k)}</span><span class="v">${esc(r.v)}</span></div>`).join("");
+  const insights=(data.insights||[]).map(i=>`<li>${esc(i)}</li>`).join("");
+  root.innerHTML=`
+    <div class="brand">ZIFKA ADVISOR</div>
+    <h1>${esc(data.title||"Plan financiero")}</h1>
+    <div class="prepared">Preparado para ${esc(data.client||"")} · ${esc(data.date||"")}</div>
+    ${data.hero?`<div class="hero"><div class="label">${esc(data.hero.label||"")}</div><div class="value">${esc(data.hero.value||"")}</div></div>`:""}
+    ${rows?`<div class="card"><h2>Resumen</h2>${rows}</div>`:""}
+    ${insights?`<div class="card"><h2>Observaciones</h2><ul>${insights}</ul></div>`:""}
+    ${data.disclaimer?`<div class="card"><h2>Notas</h2><div>${esc(data.disclaimer)}</div></div>`:""}
+    <div class="foot"><span class="${ok?"sig-ok":"sig-bad"}">${ok?"✓ Firma válida — datos no alterados":"⚠ Firma inválida — pide un enlace nuevo a tu asesor"}</span><br><br>Este enlace fue generado localmente por tu asesor. Los datos NO se enviaron a ningún servidor: viajan sólo dentro de la URL.</div>`;
+}
+render();
+</script>
+</body>
+</html>
